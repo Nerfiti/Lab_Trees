@@ -1,6 +1,6 @@
 #include <cstdio>
 
-typedef unsigned int elem_t;
+typedef int elem_t;
 
 struct Tree
 {
@@ -56,6 +56,8 @@ struct Treap
     Treap *parent   = nullptr;
     Treap *left     = nullptr;
     Treap *right    = nullptr;
+
+    size_t k = 0; 
 };
 
 Treap   *TreapCtor  (elem_t x, elem_t y);
@@ -63,7 +65,38 @@ void     TreapSplit (Treap *tree, elem_t key, Treap **left_ptr, Treap **right_pt
 Treap   *TreapMerge (Treap *tree1, Treap *tree2);
 void     TreapDtor  (Treap **tree_ptr);
 
-void     TreapPrintInfo(Treap *tree);
+Treap   *TreapInsert(Treap *tree, elem_t x, elem_t y);
+Treap   *TreapDelete(Treap *tree, elem_t x);
+bool     TreapExist (Treap *tree, elem_t x);
+Treap   *TreapNext  (Treap *tree, elem_t x);
+Treap   *TreapPrev  (Treap *tree, elem_t x);
+Treap   *TreapKth   (Treap *tree, size_t k);
 
+Treap   *TreapMinimum(Treap *tree);
+Treap   *TreapMaximum(Treap *tree);
 
+//--------------------------------------------------------------------------------
+
+const unsigned int MAX_STR_LEN = 500;
+
+struct Splay
+{
+    elem_t val;
+
+    Splay *parent;
+    Splay *left;
+    Splay *right;
+};
+
+Splay *SplayCtr     (elem_t val);
+void   SplayZig     (Splay *node);
+void   SplayZigZig  (Splay *node);
+void   SplayZigZag  (Splay *node);
+Splay *SplaySplay   (Splay *node);
+Splay *SplayMerge   (Splay *tree1, Splay *tree2);
+void   SplaySplit   (Splay *tree, elem_t val, Splay **left_ptr, Splay **right_ptr);
+Splay *SplayInsert  (Splay *tree, elem_t val);
+Splay *SplayDelete  (Splay *tree, elem_t val);
+Splay *SplayFind    (Splay *tree, elem_t val);
+void   SplayDtor    (Splay **tree_ptr);
 //--------------------------------------------------------------------------------

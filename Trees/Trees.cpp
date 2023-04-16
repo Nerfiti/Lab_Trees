@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstring>
 #include <malloc.h>
 
 #include "Trees.hpp"
@@ -47,6 +48,9 @@ Tree *NaiveTreeErase(Tree *tree, elem_t value)
         return nullptr;
     
     Tree *target = Search(tree, value);
+    
+    if (!target)
+        return tree;
 
     if (!target->left && !target->right)
     {
@@ -68,7 +72,7 @@ Tree *NaiveTreeErase(Tree *tree, elem_t value)
 
         if (target->parent)
         {
-            ((child == child->parent->left) ? child->parent->left : child->parent->right) = child;
+            ((target == target->parent->left) ? child->parent->left : child->parent->right) = child;
         }
 
         free(target);
@@ -80,7 +84,7 @@ Tree *NaiveTreeErase(Tree *tree, elem_t value)
 
     Tree *next = NaiveGetNext(target);
     assert(next);
-    
+
     next->left   = target->left;
     next->parent = target->parent;
     next->value  = target->value;
@@ -365,6 +369,7 @@ Treap *TreapCtor(elem_t x, elem_t y)
 
     tree->x = x;
     tree->y = y;
+    tree->k = 1;
 
     return tree;
 }
@@ -380,14 +385,17 @@ void TreapSplit(Treap *tree, elem_t key, Treap **left_ptr, Treap **right_ptr)
         return;
     }
 
-    if (tree->x < key)
+    if (tree->x <= key)
     {
         *left_ptr = tree;
         TreapSplit(tree->right, key, &tree->right, right_ptr);
         if (tree->right)
             tree->right->parent = tree;
         if (*right_ptr)
+        {
             (*right_ptr)->parent = nullptr;
+            tree->k -= (*right_ptr)->k;
+        }
     }
     else
     {
@@ -396,7 +404,10 @@ void TreapSplit(Treap *tree, elem_t key, Treap **left_ptr, Treap **right_ptr)
         if (tree->left)
             tree->left->parent = tree;
         if (*left_ptr)
+        {
             (*left_ptr)->parent = nullptr;
+            tree->k -= (*left_ptr)->k;
+        }
     }
 }
 
@@ -407,14 +418,16 @@ Treap *TreapMerge(Treap *tree1, Treap *tree2)
     if (!tree2)
         return tree1;
 
-    if (tree1->y > tree2->y)
+    if (tree1->y < tree2->y)
     {
+        tree1->k += tree2->k;
         tree1->right = TreapMerge(tree1->right, tree2);
         tree1->right->parent = tree1;
         return tree1;
     }
     else
     {
+        tree2->k += tree1->k;
         tree2->left = TreapMerge(tree1, tree2->left);
         tree2->left->parent = tree2;
         return tree2;
@@ -432,25 +445,383 @@ void TreapDtor(Treap **tree_ptr)
     *tree_ptr = nullptr;
 }
 
-void TreapPrintInfo(Treap *tree)
+Treap *TreapInsert(Treap *tree, elem_t x, elem_t y)
 {
     if (!tree)
+        return TreapCtor(x, y);
+
+    Treap *left  = nullptr,
+          *right = nullptr;
+
+    TreapSplit(tree, x, &left, &right);
+
+    tree = TreapMerge(left, TreapCtor(x, y));
+    tree = TreapMerge(tree, right);
+
+    return tree;
+}
+
+Treap *TreapDelete(Treap *tree, elem_t x)
+{
+    if (!tree || !TreapExist(tree, x))
+        return tree;
+
+    Treap *temp   = nullptr,
+          *left   = nullptr,
+          *middle = nullptr,
+          *right  = nullptr;
+
+    TreapSplit(tree, x, &temp, &right);
+    TreapSplit(temp, x-1, &left, &middle);
+
+    if (middle)
+    {
+        Treap *Mleft = middle->left;
+        Treap *Mright = middle->right;
+        free(middle);
+        middle = TreapMerge(Mleft, Mright);
+    }
+    return TreapMerge(left, TreapMerge(middle, right));
+}
+
+bool TreapExist(Treap *tree, elem_t x)
+{
+    if (!tree)
+        return false;
+    
+    if (tree->x == x)
+        return true;
+
+    if (tree->x > x)
+        return TreapExist(tree->left, x);
+    
+    return TreapExist(tree->right, x);
+}
+
+Treap *TreapNext(Treap *tree, elem_t x)
+{
+    if (!tree)
+        return nullptr;
+    
+    if (x >= tree->x)
+    {
+        if (!tree->right)
+            return nullptr;
+        
+        Treap *rightMin = TreapMinimum(tree->right);
+
+        if (x >= rightMin->x)
+            return TreapNext(tree->right, x);
+        
+        return rightMin;
+    }
+
+    if (!tree->left)
+        return tree;
+    
+    elem_t leftMaxValue = TreapMaximum(tree->left)->x;
+
+    if (x < leftMaxValue)
+        return TreapNext(tree->left, x);
+    
+    return tree;
+
+    return 0;
+}
+
+Treap *TreapPrev(Treap *tree, elem_t x)
+{
+    if (!tree)
+        return nullptr;    
+
+    if (x <= tree->x)
+    {
+        if (!tree->left)
+            return nullptr;
+        
+        Treap *leftMax = TreapMaximum(tree->left);
+
+        if (x <= leftMax->x)
+            return TreapPrev(tree->left, x);
+        
+        return leftMax;
+    }
+
+    if (!tree->right)
+        return tree;
+    
+    elem_t rightMinValue = TreapMinimum(tree->right)->x;
+
+    if (x > rightMinValue)
+        return TreapPrev(tree->right, x);
+    
+    return tree;
+
+    return 0;
+}
+
+Treap *TreapKth(Treap *tree, size_t k)
+{
+    if (!tree)
+        return nullptr;
+
+    size_t leftK  = 0,
+           rightK = 0;
+    
+    if (tree->left)
+        leftK = tree->left->k;
+    if (tree->right)
+        rightK = tree->right->k;
+
+    if (leftK + 1 == k)
+        return tree;
+    
+    if (leftK + 1 < k)
+        return TreapKth(tree->right, k - leftK - 1);
+    
+    return TreapKth(tree->left, k);
+}
+
+Treap *TreapMinimum(Treap *tree)
+{
+    if (!tree)
+        return nullptr;
+
+    while (tree->left)
+        tree = tree->left;
+
+    return tree;
+}
+
+Treap *TreapMaximum(Treap *tree)
+{
+    if (!tree)
+        return nullptr;
+
+    while (tree->right)
+        tree = tree->right;
+
+    return tree;
+}
+
+//--------------------------------------------------------------------------------
+
+Splay *SplayCtr(elem_t val)
+{
+    Splay *tree = (Splay *)calloc(1, sizeof(Splay));
+
+    tree->val = val;
+
+    return tree;
+}
+
+void SplayZig(Splay *node)
+{  
+    assert(node && node->parent);
+
+    if (node == node->parent->right)
+    {
+        Splay *ded              = node->parent->parent;
+        Splay *parent           = node->parent;
+
+        parent->right           = node->left;
+        if (node->left)
+            node->left->parent  = parent;
+
+        parent->parent          = node;
+        node->left              = parent;
+        node->parent            = ded;
+        if (ded)
+        {
+            if (ded->right == parent)
+                ded->right = node;
+            else
+                ded->left = node;
+        }
+    }
+    else
+    {
+        Splay *ded              = node->parent->parent;
+        Splay *parent           = node->parent;
+
+        parent->left            = node->right;
+        if (node->right)
+            node->right->parent = parent;
+
+        parent->parent          = node;
+        node->right             = parent;
+        node->parent            = ded;
+        if (ded)
+        {
+            if (ded->right == parent)
+                ded->right = node;
+            else
+                ded->left = node;
+        }
+    }
+}
+
+void SplayZigZig(Splay *node)
+{
+    assert(node && node->parent && node->parent->parent);
+
+    SplayZig(node->parent);
+    SplayZig(node);
+}
+
+void SplayZigZag(Splay *node)
+{
+    assert(node && node->parent && node->parent->parent);
+
+    SplayZig(node);
+    SplayZig(node);
+}
+
+Splay *SplaySplay(Splay *node)
+{
+    if (!node)
+        return node;
+
+    while (node->parent)
+    {
+        if (!node->parent->parent)
+            SplayZig(node);
+        else if ( (node == node->parent->right && node->parent == node->parent->parent->right) ||
+                  (node == node->parent->left  && node->parent == node->parent->parent->left )     )
+        {
+            SplayZigZig(node);
+        }
+        else
+            SplayZigZag(node);
+    }
+
+    return node;
+}
+
+Splay *SplayMerge(Splay *tree1, Splay *tree2)
+{
+    if (!tree1)
+        return tree2;
+    if (!tree2)
+        return tree1;
+
+    Splay *max = tree1;
+
+    while (max->right)
+        max = max->right;
+
+    SplaySplay(max);
+    max->right = tree2;
+    tree2->parent = max;
+
+    return max;
+}
+
+void SplaySplit(Splay *tree, elem_t val, Splay **left_ptr, Splay **right_ptr)
+{
+    if (!tree)
+    {
+        *left_ptr  = nullptr;
+        *right_ptr = nullptr;
+    }
+
+    Splay *target = SplayFind(tree, val);
+    target = SplaySplay(target);
+
+    if (target->val < val)
+    {
+        *left_ptr  = target;
+        *right_ptr = target->right;
+        
+        if (target->right)
+            target->right->parent = nullptr;
+        
+        target->right = nullptr;
+    }
+    else
+    {
+        *left_ptr  = target->left;
+        *right_ptr = target;
+        
+        if (target->left)
+            target->left->parent = nullptr;
+        
+        target->left = nullptr;
+    }
+}
+
+Splay *SplayInsert(Splay *tree, elem_t val)
+{
+    if (!tree)
+        return SplayCtr(val);
+
+    Splay *left  = nullptr;
+    Splay *right = nullptr;
+
+    SplaySplit(tree, val, &left, &right);
+    tree = SplayMerge(left, SplayCtr(val));
+    tree = SplayMerge(tree, right);
+
+    return tree;
+}
+
+Splay *SplayDelete(Splay *tree, elem_t val)
+{
+    Splay *target = SplayFind(tree, val);
+    target = SplaySplay(target);
+
+    if (val == target->val)
+    {
+        Splay *left   = target->left;
+        Splay *right  = target->right;
+
+        if (left)
+            left->parent  = nullptr;
+        if (right)
+            right->parent = nullptr;
+        free(target);
+        return SplayMerge(left, right);
+    }
+    return target;
+}
+
+Splay *SplayFind(Splay *tree, elem_t val)
+{
+    if (!tree)
+        return tree;
+
+    while (val != tree->val)
+    {
+        if (val > tree->val)
+        {
+            if (!tree->right)
+                return tree;
+            
+            tree = tree->right;
+            continue;
+        }
+
+        if (!tree->left)
+            return tree;
+
+        tree = tree->left;
+        continue;
+    }
+
+    return tree;
+}
+
+void SplayDtor(Splay **tree_ptr)
+{
+    if (!tree_ptr || !(*tree_ptr))
         return;
 
-    int parent = 0;
-    int left   = 0;
-    int right  = 0;
+    SplayDtor(&(*tree_ptr)->left);
+    SplayDtor(&(*tree_ptr)->right);
+    free(*tree_ptr);
+    *tree_ptr = nullptr;
 
-    if (tree->parent)
-        parent = tree->parent->x;
-    if (tree->left)
-        left = tree->left->x;
-    if (tree->right)
-        right = tree->right->x;
-
-    TreapPrintInfo(tree->left);
-    printf("%u %u %u\n", parent, left, right);
-    TreapPrintInfo(tree->right);
+    return;
 }
 
 //--------------------------------------------------------------------------------
